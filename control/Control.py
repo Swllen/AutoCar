@@ -1,11 +1,12 @@
 import pexpect
 import threading
 import time
-import serial
-from Logger import logger
+
+from Logger.Logger import logger
 from serial_package.serial_api import *
 from serial_package.uservo import UartServoManager
-from ..config import *
+from config import *
+import serial
 
 
 
@@ -179,16 +180,11 @@ class RobotController:
 
 if __name__ == "__main__":
     try:
-        car = RobotController(port=CAR_PORT, password=PASSWORD, baudrate=CAR_BOUDRATE, debug=DEBUG)
-        car.forward(0.5)
-        time.sleep(2)
-        car.stop()
-        time.sleep(1)
-        car.rotate_cw(1.0)
-        time.sleep(2)
-        car.stop()
+        uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
+        uservo.set_pitch(30)
+        uservo.set_yaw(45)
+    
     except KeyboardInterrupt:
         logger.info("退出中...")
     finally:
-        car.close()
         logger.info("程序结束")
