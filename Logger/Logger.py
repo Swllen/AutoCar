@@ -1,6 +1,6 @@
 import os
 import logging
-from .config import DEBUG, LOG_DIR
+from ..config import DEBUG, LOG_DIR
 from datetime import datetime
 
 
