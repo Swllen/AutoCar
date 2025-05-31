@@ -9,6 +9,9 @@ from datetime import datetime
 def open_camera(camera_type):
     try:
         cam = cv2.VideoCapture(camera_type)
+        cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+        cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         if not cam.isOpened():
             raise Exception("Camera open failed")
         return True, cam
@@ -46,6 +49,7 @@ class CameraThread:
                     self._cap.release()
                     self._open = False
                     return False, None
+                frame = cv2.flip(frame, 0)
                 return ret, frame
             return False, None
 
