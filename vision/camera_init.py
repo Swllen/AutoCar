@@ -23,11 +23,7 @@ if __name__ == "__main__":
     image_queue = queue.Queue(maxsize=10)
     camera_remote.set_queue(image_queue)
 
-    # 启动 Flask 的线程
-    def run_flask():
-        camera_remote.app.run(host='0.0.0.0', port=8080, threaded=True)
-
-    flask_thread = threading.Thread(target=run_flask)
+    flask_thread = threading.Thread(target=camera_remote.run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     cap = camera_init()
