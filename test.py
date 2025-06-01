@@ -182,8 +182,7 @@ if __name__ == "__main__":
     try:
         uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
         uservo.set_pitch(30)
-        uservo.set_yaw(45)
-    
+        uservo.set_yaw(0)
     except KeyboardInterrupt:
         logger.info("退出中...")
     finally:
