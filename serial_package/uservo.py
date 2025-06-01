@@ -284,7 +284,7 @@ class UartServoManager:
 		}
 		if is_scan_servo:
 			self.scan_servo(srv_num=srv_num)
-
+		print("finish")
 	def send_request(self, code, param_bytes):
 		'''发送请数据'''
 		packet_bytes = Packet.pack(code, param_bytes)
@@ -303,12 +303,13 @@ class UartServoManager:
 		ret = servo_id in self.servos
 		if self.is_debug and ret:
 			logging.info('[fs_uservo]舵机ID={} 响应ping'.format(servo_id))
+			print('[fs_uservo]舵机ID={} 响应ping'.format(servo_id))
 		if ret:
 	  		# 更新舵机角度
 			self.query_servo_angle(servo_id)
 		return ret
 
-	def scan_servo(self, srv_num=254):
+	def scan_servo(self, srv_num=1):
 		'''扫描所有的舵机'''
 		#ping所有的舵机
 		for servo_id in range(srv_num):
@@ -850,7 +851,7 @@ class UartServoManager:
 		Returns:
 			bytearray: 接收到的数据
 		'''
-		t_start_ns = time.monotonic_ns()
+		t_start_ns = int(time.monotonic()*1e9)
 		idle_threshold_ns = int(1_000_000)  # 增加到1ms，提高稳定性
 		timeout_ns = int(timeout * 1e9)
 		last_data_time_ns = t_start_ns
@@ -866,11 +867,11 @@ class UartServoManager:
 				if bytes_waiting:
 					data = self.uart.read(bytes_waiting)
 					buffer.extend(data)
-					last_data_time_ns = time.monotonic_ns()
+					last_data_time_ns = int(time.monotonic()*1e9)
 					if self.is_debug:
 						logging.info('Recv Bytes: ' + ' '.join(['0x%02x' % b for b in data]))
 				else:
-					now_ns = time.monotonic_ns()
+					now_ns = int(time.monotonic()*1e9)
 					# 检查是否需要等待响应
 					if wait_response:
 						# 如果超过空闲阈值，检查数据完整性
