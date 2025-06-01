@@ -1,3 +1,5 @@
+import queue
+
 YAW_SERVO_ID = 0
 PITCH_SERVO_ID = 1
 USERVO_PORT = '/dev/ttyUSB0'  # Serial port for the servo manager
@@ -10,3 +12,11 @@ PASSWORD = 'stxin.789.'  # Password for granting permission to access the serial
 
 DEBUG = True  # Debug mode for additional logging
 LOG_DIR = './Logger/logs'  # Directory for log files
+
+IMAGE_QUEUE_SIZE = 10  # Size of the image queue for camera frames
+REMOTE_IMAGE_QUEUE=queue.Queue(maxsize=IMAGE_QUEUE_SIZE)
+
+GET_TARGET = False
+WIN_SIGNAL = False
+
+NET_PATH = '/home/swllen/yolo/Car/yolov5-v7.0'
