@@ -23,6 +23,7 @@ class UservoController:
         self.ser = None
         self._lock = threading.Lock()
         self.servos = None
+        self._servos_init = False
         self._init_serial()
         self._init_servos()
 
@@ -51,21 +52,27 @@ class UservoController:
 
     def _init_servos(self):
         if self.ser:
-            self.servos = UartServoManager(self.ser, is_debug=self.debug)
-            logger.info("Servo manager initialized")
+            try:
+                self.servos = UartServoManager(self.ser, is_debug=self.debug)
+                self._servos_init = True
+                logger.info("Servo manager initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize servo manager: {e}")
+                self.servos = None
+                self._servos_init = False
         else:
             logger.error("Serial port not initialized, cannot create servo manager")
 
-    def set_pitch(self, angle, interval=1000):
-        if self.servos:
+    def set_pitch(self, angle, interval=0):
+        if self._servos_init:
             self.servos.set_servo_angle(self.pitch_servo_id, angle, interval=interval)
             self.servos.wait()
             logger.info(f"Pitch servo set to {angle}°")
         else:
             logger.error("Servo manager not initialized")
 
-    def set_yaw(self, angle, interval=1000):
-        if self.servos:
+    def set_yaw(self, angle, interval=0):
+        if self._servos_init:
             self.servos.set_servo_angle(self.yaw_servo_id, angle, interval=interval)
             self.servos.wait()
             logger.info(f"Yaw servo set to {angle}°")
@@ -73,7 +80,7 @@ class UservoController:
             logger.error("Servo manager not initialized")
 
     def get_pitch(self):
-        if self.servos:
+        if self._servos_init:
             pitch = self.servos.query_servo_angle(self.pitch_servo_id)
             logger.info(f"Pitch servo current angle: {pitch}°")
             return pitch
@@ -81,12 +88,24 @@ class UservoController:
         return None
 
     def get_yaw(self):
-        if self.servos:
+        if self._servos_init:
             yaw = self.servos.query_servo_angle(self.yaw_servo_id)
             logger.info(f"Yaw servo current angle: {yaw}°")
             return yaw
         logger.error("Servo manager not initialized")
         return None
+    def cruise(self,cruise_step=1):
+        if self._servos_init:
+            yaw = self.get_yaw()
+            new_yaw += cruise_step
+            if new_yaw > 90:
+                cruise_step = - cruise_step
+            if new_yaw < -90:
+                cruise_step = - cruise_step
+            self.set_yaw(new_yaw)
+            logger.info("Cruise mode activated")
+        else:
+            logger.error("Servo manager not initialized")
 
 
 class RobotController:
