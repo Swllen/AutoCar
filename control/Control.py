@@ -26,7 +26,7 @@ class UservoController:
         self._servos_init = False
         self._init_serial()
         self._init_servos()
-
+        self.cruise_step = 1  # Default cruise step for yaw servo
     def _grant_permission(self):
         if self.password:
             try:
@@ -94,16 +94,15 @@ class UservoController:
             return yaw
         logger.error("Servo manager not initialized")
         return None
-    def cruise(self,cruise_step=1):
+    def cruise(self):
         if self._servos_init:
             yaw = self.get_yaw()
-            new_yaw += cruise_step
+            new_yaw = yaw + self.cruise_step
             if new_yaw > 90:
-                cruise_step = - cruise_step
+                self.cruise_step = - self.cruise_step
             if new_yaw < -90:
-                cruise_step = - cruise_step
+                self.cruise_step = - self.cruise_step
             self.set_yaw(new_yaw)
-            logger.info("Cruise mode activated")
         else:
             logger.error("Servo manager not initialized")
 
@@ -200,9 +199,14 @@ class RobotController:
 if __name__ == "__main__":
     try:
         uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
-        uservo.set_pitch(30)
-        uservo.set_yaw(45)
-    
+        uservo.set_pitch(0)
+        uservo.set_yaw(0)
+        detected = False
+        while True:
+            if not detected:
+                uservo.cruise()
+            else:
+                uservo.set_yaw(0)    
     except KeyboardInterrupt:
         logger.info("退出中...")
     finally:
