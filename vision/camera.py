@@ -4,7 +4,9 @@ import cv2
 import time
 import queue
 import threading
+import vision.camera_remote as camera_remote
 from datetime import datetime
+from config import REMOTE_IMAGE_QUEUE
 
 def open_camera(camera_type):
     try:
@@ -62,7 +64,7 @@ class CameraThread:
     def __del__(self):
         self.release()
 
-image_queue = queue.Queue(maxsize=2)
+image_queue = queue.Queue(maxsize=10)
 
 def pub_image(cap: CameraThread):
     while True:
@@ -119,6 +121,11 @@ def middle_record(cap: CameraThread):
         time.sleep(1.0 / fps)
 
 def main():
+    camera_remote.set_queue(REMOTE_IMAGE_QUEUE)
+
+    flask_thread = threading.Thread(target=camera_remote.run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
     cam = CameraThread(0)
     t = threading.Thread(target=pub_image, args=(cam,), daemon=True)
     t.start()
@@ -128,7 +135,6 @@ def main():
     while True:
        
         frame = image_queue.get()
-        flipped_frame = cv2.flip(frame, 0)
-        print("[INFO] Frame received from queue")
+        REMOTE_IMAGE_QUEUE.put(frame)
 if __name__ == "__main__":
     main()
