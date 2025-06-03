@@ -20,6 +20,7 @@ def camera_init():
 
 if __name__ == "__main__":
         # 初始化图像队列
+    import time
     image_queue = queue.Queue(maxsize=10)
     camera_remote.set_queue(image_queue)
 
@@ -28,14 +29,17 @@ if __name__ == "__main__":
     flask_thread.start()
     cap = camera_init()
     while True:
+        start_time = time.time()
         ret, frame = cap.read()
         if not ret:
             print("Error: Could not read frame.")
             continue
 
         # 处理图像（比如上下翻转）
-        # frame = cv2.flip(frame, 0)
+        frame = cv2.flip(frame, 0)
 
         # 将处理后图像放入队列
         if not image_queue.full():
             image_queue.put(frame)
+        end_time = time.time()
+        # print(f"FPS:{1/(end_time - start_time):.4f}")
