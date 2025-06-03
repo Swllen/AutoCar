@@ -1,6 +1,7 @@
 import pexpect
 import threading
 import time
+import random
 
 from Logger.Logger import logger
 from serial_package.serial_api import *
@@ -62,7 +63,7 @@ class UservoController:
                 self._servos_init = False
         else:
             logger.error("Serial port not initialized, cannot create servo manager")
-
+    # y-direction, set angle
     def set_pitch(self, angle, interval=0):
         if self._servos_init:
             self.servos.set_servo_angle(self.pitch_servo_id, angle, interval=interval)
@@ -70,7 +71,7 @@ class UservoController:
             logger.info(f"Pitch servo set to {angle}°")
         else:
             logger.error("Servo manager not initialized")
-
+    # x-direction, set angle
     def set_yaw(self, angle, interval=0):
         if self._servos_init:
             self.servos.set_servo_angle(self.yaw_servo_id, angle, interval=interval)
@@ -78,7 +79,7 @@ class UservoController:
             logger.info(f"Yaw servo set to {angle}°")
         else:
             logger.error("Servo manager not initialized")
-
+    # y-direction, get angle
     def get_pitch(self):
         if self._servos_init:
             pitch = self.servos.query_servo_angle(self.pitch_servo_id)
@@ -86,7 +87,7 @@ class UservoController:
             return pitch
         logger.error("Servo manager not initialized")
         return None
-
+    # x-direction, get angle
     def get_yaw(self):
         if self._servos_init:
             yaw = self.servos.query_servo_angle(self.yaw_servo_id)
@@ -94,6 +95,7 @@ class UservoController:
             return yaw
         logger.error("Servo manager not initialized")
         return None
+    
     def cruise(self):
         if self._servos_init:
             yaw = self.get_yaw()
@@ -147,7 +149,7 @@ class RobotController:
         if self.ser and self.ser.is_open:
             with self._lock:
                 self.ser.write(data)
-                logger.debug(f"[TX] {data.hex(' ')}")
+                # logger.debug(f"[TX] {data.hex(' ')}")
 
     def read_all(self):
         if self.ser and self.ser.is_open:
@@ -171,7 +173,8 @@ class RobotController:
 
     def backward(self, speed_mps):
         self.send_packet(backward(speed_mps))
-
+    def motion(self, angle, speed_mps):
+        self.send_packet(motion(angle, speed_mps))
     def rotate_cw(self, w_rads):
         self.send_packet(rotate_cw(w_rads))
 
@@ -201,6 +204,18 @@ if __name__ == "__main__":
         uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
         uservo.set_pitch(0)
         uservo.set_yaw(0)
+        # car = RobotController(port=CAR_PORT, password=PASSWORD, baudrate=CAR_BAUDRATE, debug=DEBUG)
+        # # car.forward(0.5)
+        
+        # time.sleep(1)
+        # # car.stop()
+        # # speed = random.uniform(-1, 1)
+        # # single_time = random.uniform(0.5, 2)
+        # speed = 0.5
+        # car.motion(90,speed)
+        # time.sleep(0.2)
+        # car.stop()
+        # car.__del__()
         detected = False
         while True:
             if not detected:
