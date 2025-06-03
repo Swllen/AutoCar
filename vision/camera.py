@@ -133,8 +133,10 @@ def main():
     print("Press 's' to save image, 'r' to record, 'q' to quit")
 
     while True:
-       
+        start_time = time.time()
         frame = image_queue.get()
         REMOTE_IMAGE_QUEUE.put(frame)
+        end_time = time.time()
+        print(f"FPS:{1/(end_time - start_time):.4f}")
 if __name__ == "__main__":
     main()
