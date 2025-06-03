@@ -1,3 +1,4 @@
+import math
 # === 通用工具函数 ===
 def int16_to_bytes(val):
     """将有符号整数转为两个字节"""
@@ -22,6 +23,15 @@ def forward(speed_mps):
 
 def backward(speed_mps):
     return build_velocity_frame(x_speed=int(-speed_mps * 1000))
+def motion(angle, speed_mps):
+    """
+    根据角度和速度构建运动指令
+    angle: 角度，单位为弧度
+    speed_mps: 速度，单位为米每秒
+    """
+    x_speed = int(speed_mps * 1000 * math.cos(angle))
+    y_speed = int(speed_mps * 1000 * math.sin(angle))
+    return build_velocity_frame(x_speed=x_speed, y_speed=y_speed)
 
 def rotate_cw(w_rads):
     return build_velocity_frame(w_speed=int(-w_rads * 1000))
