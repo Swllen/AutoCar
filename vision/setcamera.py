@@ -12,6 +12,7 @@ PARAMETERS = {
     "5": ("saturation", "饱和度"),
     "6": ("gain", "增益"),
     "7": ("sharpness", "锐度"),
+    "8": ("gamma", "伽马值"),
 }
 
 
