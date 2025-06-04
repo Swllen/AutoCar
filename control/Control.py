@@ -8,7 +8,7 @@ from serial_package.serial_api import *
 from serial_package.uservo import UartServoManager
 from config import *
 import serial
-
+import struct
 
 
 class UservoController:
@@ -27,7 +27,7 @@ class UservoController:
         self._servos_init = False
         self._init_serial()
         self._init_servos()
-        self.cruise_step = 1  # Default cruise step for yaw servo
+        self.cruise_step = 3  # Default cruise step for yaw servo
     def _grant_permission(self):
         if self.password:
             try:
@@ -64,18 +64,18 @@ class UservoController:
         else:
             logger.error("Serial port not initialized, cannot create servo manager")
     # y-direction, set angle
-    def set_pitch(self, angle, interval=0):
+    def set_pitch(self, angle, interval=0, velocity=10):
         if self._servos_init:
-            self.servos.set_servo_angle(self.pitch_servo_id, angle, interval=interval)
-            self.servos.wait()
+            self.servos.set_servo_angle(self.pitch_servo_id, angle, interval=interval,velocity=velocity)
+            # self.servos.wait()
             logger.info(f"Pitch servo set to {angle}°")
         else:
             logger.error("Servo manager not initialized")
     # x-direction, set angle
-    def set_yaw(self, angle, interval=0):
+    def set_yaw(self, angle, interval=0, velocity=1000):
         if self._servos_init:
             self.servos.set_servo_angle(self.yaw_servo_id, angle, interval=interval)
-            self.servos.wait()
+            # self.servos.wait()
             logger.info(f"Yaw servo set to {angle}°")
         else:
             logger.error("Servo manager not initialized")
@@ -199,23 +199,72 @@ class RobotController:
         self.close()
 
 
+class UservoThread(threading.Thread):
+    def __init__(self, uservo_controller: UservoController, frequency=FREQUENCE, alpha=0.4):
+        super().__init__()
+        self.uservo = uservo_controller
+        self.freq = frequency
+        self.alpha = alpha
+        self.interval = 1.0 / self.freq
+
+        self.target_yaw = 0
+        self.target_pitch = 0
+        self.current_yaw = 0
+        self.current_pitch = 0
+
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+
+    def set_target(self, yaw, pitch):
+        with self._lock:
+            self.target_yaw = yaw
+            self.target_pitch = pitch
+
+    def stop(self):
+        self._stop_event.set()
+
+    def run(self):
+        while not self._stop_event.is_set():
+            with self._lock:
+                # 插值
+                t1 = time.time()
+                self.current_yaw = (1 - self.alpha) * self.current_yaw + self.alpha * self.target_yaw
+                self.current_pitch = (1 - self.alpha) * self.current_pitch + self.alpha * self.target_pitch
+
+                # 发命令
+                self.uservo.set_yaw(self.current_yaw)
+                self.uservo.set_pitch(self.current_pitch)
+                t2 = time.time()
+                waste_time = t2 - t1
+            time.sleep(self.interval - waste_time)
+
 if __name__ == "__main__":
     try:
         uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
-        uservo.set_pitch(0)
-        uservo.set_yaw(0)
-        # car = RobotController(port=CAR_PORT, password=PASSWORD, baudrate=CAR_BAUDRATE, debug=DEBUG)
-        # # car.forward(0.5)
+        # uservo.get_pitch()
+        # uservo.get_yaw()
+        t1 = time.time()
+        uservo.set_yaw_pitch(45,0)
+        # uservo.set_pitch(0)
+        t2 = time.time()
+        print(1/(t2-t1))
+        # uservo.set_pitch(0)
+        # uservo.set_yaw(0)
+        car = RobotController(port=CAR_PORT, password=PASSWORD, baudrate=CAR_BAUDRATE, debug=DEBUG)
+        car.forward(1.5)
         
-        # time.sleep(1)
+        time.sleep(1.5)
+        car.stop()
+        car.turn_right(0.3,1.5)
+        time.sleep(1)
+        car.stop()
+        # # # speed = random.uniform(-1, 1)
+        # # # single_time = random.uniform(0.5, 2)
+        # # speed = 0.5
+        # # car.motion(90,speed)
+        # # time.sleep(0.2)
         # # car.stop()
-        # # speed = random.uniform(-1, 1)
-        # # single_time = random.uniform(0.5, 2)
-        # speed = 0.5
-        # car.motion(90,speed)
-        # time.sleep(0.2)
-        # car.stop()
-        # car.__del__()
+        # # car.__del__()
         detected = False
         while True:
             if not detected:
