@@ -75,10 +75,11 @@ def build_beep_off_frame():
     return bytearray(frame)
 
 
-def build_yaw_pitch_package(yaw_delta, pitch_delta):
+def build_yaw_pitch_package(yaw_delta, pitch_delta,flag):
     header = b'\xAA\x55'
     cmd = b'\x01'
-    payload = struct.pack('<ff',yaw_delta, pitch_delta)  # 两个float，小端
+    flag_byte = struct.pack('B', flag)  # 标记位：0或1
+    payload = flag_byte + struct.pack('<ff', yaw_delta, pitch_delta)  # 标记 + 两个float
     length = len(payload).to_bytes(1, 'little')
 
     checksum = 0
@@ -86,5 +87,6 @@ def build_yaw_pitch_package(yaw_delta, pitch_delta):
         checksum ^= b
 
     packet = header + cmd + length + payload + bytes([checksum])
+
     return packet
 
