@@ -1,4 +1,6 @@
 import math
+import struct
+
 # === 通用工具函数 ===
 def int16_to_bytes(val):
     """将有符号整数转为两个字节"""
@@ -71,3 +73,18 @@ def build_beep_off_frame():
     frame = [0xAA, 0x55, 0x06, 0x54, 0x00]
     frame.append(calc_checksum(frame))
     return bytearray(frame)
+
+
+def build_yaw_pitch_package(yaw_delta, pitch_delta):
+    header = b'\xAA\x55'
+    cmd = b'\x01'
+    payload = struct.pack('<ff',yaw_delta, pitch_delta)  # 两个float，小端
+    length = len(payload).to_bytes(1, 'little')
+
+    checksum = 0
+    for b in cmd + length + payload:
+        checksum ^= b
+
+    packet = header + cmd + length + payload + bytes([checksum])
+    return packet
+
