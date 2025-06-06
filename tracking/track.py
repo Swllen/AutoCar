@@ -5,12 +5,13 @@ import time
 from filterpy.kalman import KalmanFilter
 from collections import deque
 import torch
-from control.Control import RobotController, UservoController
+from control.Control import RobotController, UservoSer
 from config import *
 from yolov5.predictor import *
 import camera.camera_remote as camera_remote
 from camera.camera import CameraThread,pub_image,image_queue
 from Logger.Logger import logger
+from inference.infer import *
 # -------------------------------
 # 卡尔曼滤波器类（用于平滑装甲板中心点）
 # -------------------------------
@@ -44,7 +45,7 @@ class ArmorKalmanFilter:
 
 
         # 观测噪声协方差矩阵 R
-        self.kf.R = np.diag([2.0, 1.0])  # x方向噪声比y大
+        self.kf.R = np.diag([2.0, 2.0])  # x方向噪声比y大
 
         # 过程噪声协方差矩阵 Q（可调）
         # self.kf.Q = np.array([[1, 0, 0, 0, 0, 0],
@@ -142,7 +143,7 @@ class CarTracker:
 # PID控制器类
 # -------------------------------
 class PIDController:
-    def __init__(self, K_x, K_y, uservo:UservoController, setpoint=(0.5, 0.5), frame_size=[640, 480], dead_zone=0.00):
+    def __init__(self, K_x, K_y, uservo:UservoSer, setpoint=(0.5, 0.5), frame_size=[640, 480], dead_zone=0.00):
         """
         K_x: PID参数列表 [kp_x, ki_x, kd_x]
         K_y: PID参数列表 [kp_y, ki_y, kd_y]
@@ -176,7 +177,7 @@ class PIDController:
 
 
         # 计算横向和纵向误差
-        error_x = self.setpoint[0] - nomalized_measured_value[0]
+        error_x = nomalized_measured_value[0] - self.setpoint[0]
         error_y = nomalized_measured_value[1] - self.setpoint[1]
 
         # 应用死区
@@ -196,18 +197,20 @@ class PIDController:
 
         self.previous_drror_x = error_x
         self.previous_drror_y = error_y
+        yaw_delta = output_x * self.max_yaw_angle
+        pitch_delta = output_y * self.max_pitch_angle
         if DEBUG:
             logger.debug(f"[PID] messured_x: {nomalized_measured_value[0]:.4f}, messured_y: {nomalized_measured_value[1]:.4f}")
             logger.debug(f"[PID] Error X: {error_x:.4f}, Error Y: {error_y:.4f}")
             logger.debug(f"[PID] Output X: {output_x:.4f}, Output Y: {output_y:.4f}")
 
-        return output_x, output_y
+        return yaw_delta,pitch_delta
 
     def move(self, output_x, output_y):
         yaw_now, pitch_now = self.uservo.get_yaw(), self.uservo.get_pitch()
         yaw_delta = output_x * self.max_yaw_angle
         pitch_delta = output_y * self.max_pitch_angle
-        self.uservo.set_yaw(yaw_delta+yaw_now)
+        self.uservo.set_yaw(yaw_now-yaw_delta)
         self.uservo.set_pitch(pitch_delta+pitch_now)
         if DEBUG:
             logger.debug(f"[MOVE] Pitch Now: {pitch_now:.3f}, Yaw Now: {yaw_now:.3f}")
@@ -225,32 +228,27 @@ def compute_yaw_pitch(tvec):
     return yaw, pitch
 
 class track_process(object):
-    def __init__(self,model_path=NET_PATH,car_controller:RobotController=None, uservo_controller:UservoController=None, PID_controller:PIDController=None):
-        self.model = YoLov5TRT(model_path)
+    def __init__(self,model_path=NET_PATH,car_controller:RobotController=None, uservo_ser:UservoSer=None, PID_controller:PIDController=None):
+        self.model = infer_progress(model_path)
         self.trackers = {}
         self.finding = 0
         self.car_controller:RobotController = car_controller
-        self.uservo_controller:UservoController = uservo_controller
+        self.uservo_ser:UservoSer = uservo_ser
         self.PID_controller:PIDController = PID_controller
 
     def track(self):
+        loss_frame = 100
         cap = camera_init()
         trackers = {}  # 保存每个 ID 的 CarTracker
-        pid_controller = PIDController(K_x=PID_K_X, K_y=PID_K_Y, uservo=self.uservo_controller)
+        pid_controller = PIDController(K_x=PID_K_X, K_y=PID_K_Y, uservo=self.uservo_ser)
         while True:
-            start_time = time.time()
-            # if not image_queue.empty():
-            #     frame = image_queue.get()
-                # frame_flag = 1
-            # else:
-            #     print("no frame")   
+            start_time = time.time() 
             ret, frame = cap.read()
             if not ret:
                 print("Error: Could not read frame.")
                 continue
-            frame = cv2.flip(frame,0)
             results = self.model.model_infer([frame])
-            is_detected = False
+            is_detected = 0
             print(f"results:{len(results)}")
             if len(results) != 0:
                 for result in results:
@@ -258,13 +256,9 @@ class track_process(object):
                     x1, y1, x2, y2 = map(int, result.boxes)
                     cx = int((result.boxes[0] + result.boxes[2]) / 2)
                     cy = int((result.boxes[1] + result.boxes[3]) / 2)
-                    is_detected = True              
-                    # 绘制目标框
-                    # cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)  # 绿色框
-                    # cv2.putText(frame, f"{class_id}", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
+                    is_detected = 1             
                     # # 绘制测量点 (目标框中心)
-                    # cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+                    cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
 
                     # Create a new tracker if it doesn't exist
                     if class_id not in trackers:
@@ -279,13 +273,19 @@ class track_process(object):
                     # REMOTE_IMAGE_QUEUE.put(frame)
                     # PID 控制器调整云台
                     
-                    output_x, output_y = pid_controller.update(pred_position)
-                    pid_controller.move(output_x, output_y)   
+                    yaw_delta, pitch_delta = pid_controller.update(pred_position)
+                    self.uservo_ser.send_packet(yaw_delta,pitch_delta,is_detected)   
+                loss_frame = 0
             cv2.imshow("Camera View", frame)
             cv2.waitKey(1)
 
-            if not is_detected:
-                self.uservo_controller.cruise()
+            if not is_detected: 
+                loss_frame += 1
+                if loss_frame > 10:
+                    self.uservo_ser.send_packet(0,0,is_detected)
+                else:
+                    continue
+
             end_time = time.time()
             print(f"\033[92mFPS:{1/(end_time - start_time)}\033[0m")
         # 释放资源
@@ -331,8 +331,8 @@ if __name__ == "__main__" and True:
     # cam = CameraThread(0)
     # t = threading.Thread(target=pub_image, args=(cam,), daemon=True)
     # t.start()
-    uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
-    main_process = track_process(NET_PATH,uservo_controller=uservo)
+    uservo = UservoSer(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
+    main_process = track_process(NET_PATH,uservo_ser=uservo)
     main_process.track()
     # except Exception as e:
     #     print(f"[ERROR]{e}")
@@ -353,8 +353,8 @@ if __name__ == "__main__":
     cam.start(input_array, output_array, input_lock, output_lock)
 
     try:
-        uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
-        main_process = track_process(NET_PATH, uservo_controller=uservo)
+        uservo = UservoSer(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
+        main_process = track_process(NET_PATH, uservo_ser=uservo)
 
         # 如果track()需要传参，请确保定义并传入对应参数
         main_process.track(output_array, output_lock, input_shape, resized_shape)
