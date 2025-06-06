@@ -11,23 +11,18 @@ import serial
 import struct
 
 
-class UservoController:
+
+class UservoSer:
     def __init__(self, port="/dev/ttyUSB0", baudrate=115200, timeout=1, password=None,
-                 debug=True, yaw_servo_id=YAW_SERVO_ID, pitch_servo_id=PITCH_SERVO_ID):
+                 debug=True):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.password = password
         self.debug = debug
-        self.yaw_servo_id = yaw_servo_id
-        self.pitch_servo_id = pitch_servo_id
         self.ser = None
-        self._lock = threading.Lock()
-        self.servos = None
-        self._servos_init = False
+        self._ser_init = False
         self._init_serial()
-        self._init_servos()
-        self.cruise_step = 3  # Default cruise step for yaw servo
     def _grant_permission(self):
         if self.password:
             try:
@@ -47,67 +42,23 @@ class UservoController:
                                      bytesize=8, timeout=0)
             if self.ser.is_open:
                 logger.info(f"Opened {self.port}")
+                self._ser_init = True
         except Exception as e:
             logger.error(f"Could not open port {self.port}: {e}")
             self.ser = None
 
-    def _init_servos(self):
-        if self.ser:
-            try:
-                self.servos = UartServoManager(self.ser, is_debug=self.debug)
-                self._servos_init = True
-                logger.info("Servo manager initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize servo manager: {e}")
-                self.servos = None
-                self._servos_init = False
-        else:
-            logger.error("Serial port not initialized, cannot create servo manager")
-    # y-direction, set angle
-    def set_pitch(self, angle, interval=0, velocity=10):
-        if self._servos_init:
-            self.servos.set_servo_angle(self.pitch_servo_id, angle, interval=interval,velocity=velocity)
-            # self.servos.wait()
-            logger.info(f"Pitch servo set to {angle}°")
+    def send_packet(self, yaw, pitch, flag):
+        if self._ser_init:
+            if flag == 0:
+                flag = 1
+            else:
+                flag = 0
+            data = build_yaw_pitch_package(yaw,pitch,flag)
+            self.ser.write(data)
+            logger.info(f"Yaw {yaw}° ,Pitch {pitch}° is published. Cruise Flag is {flag}")
         else:
             logger.error("Servo manager not initialized")
-    # x-direction, set angle
-    def set_yaw(self, angle, interval=0, velocity=1000):
-        if self._servos_init:
-            self.servos.set_servo_angle(self.yaw_servo_id, angle, interval=interval)
-            # self.servos.wait()
-            logger.info(f"Yaw servo set to {angle}°")
-        else:
-            logger.error("Servo manager not initialized")
-    # y-direction, get angle
-    def get_pitch(self):
-        if self._servos_init:
-            pitch = self.servos.query_servo_angle(self.pitch_servo_id)
-            logger.info(f"Pitch servo current angle: {pitch}°")
-            return pitch
-        logger.error("Servo manager not initialized")
-        return None
-    # x-direction, get angle
-    def get_yaw(self):
-        if self._servos_init:
-            yaw = self.servos.query_servo_angle(self.yaw_servo_id)
-            logger.info(f"Yaw servo current angle: {yaw}°")
-            return yaw
-        logger.error("Servo manager not initialized")
-        return None
     
-    def cruise(self):
-        if self._servos_init:
-            yaw = self.get_yaw()
-            new_yaw = yaw + self.cruise_step
-            if new_yaw > 90:
-                self.cruise_step = - self.cruise_step
-            if new_yaw < -90:
-                self.cruise_step = - self.cruise_step
-            self.set_yaw(new_yaw)
-        else:
-            logger.error("Servo manager not initialized")
-
 
 class RobotController:
     def __init__(self, port="/dev/ttyUSB0", baudrate=115200, timeout=1, password=None, debug=False):
@@ -187,8 +138,20 @@ class RobotController:
     def turn_right(self, speed_mps, turn_ratio):
         self.send_packet(turn_right(speed_mps, turn_ratio))
 
+    def beep_on(self):
+        self.send_packet(build_beep_on_frame())
+    
+    def beep_off(self):
+        self.send_packet(build_beep_off_frame())
+
     def stop(self):
         self.send_packet(stop())
+    
+    def victory(self):
+        print("Victory signal started")
+        self.beep_on()
+        time.sleep(0.25)
+        self.beep_off()
 
     def close(self):
         if self.ser and self.ser.is_open:
@@ -199,78 +162,28 @@ class RobotController:
         self.close()
 
 
-class UservoThread(threading.Thread):
-    def __init__(self, uservo_controller: UservoController, frequency=FREQUENCE, alpha=0.4):
-        super().__init__()
-        self.uservo = uservo_controller
-        self.freq = frequency
-        self.alpha = alpha
-        self.interval = 1.0 / self.freq
-
-        self.target_yaw = 0
-        self.target_pitch = 0
-        self.current_yaw = 0
-        self.current_pitch = 0
-
-        self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-
-    def set_target(self, yaw, pitch):
-        with self._lock:
-            self.target_yaw = yaw
-            self.target_pitch = pitch
-
-    def stop(self):
-        self._stop_event.set()
-
-    def run(self):
-        while not self._stop_event.is_set():
-            with self._lock:
-                # 插值
-                t1 = time.time()
-                self.current_yaw = (1 - self.alpha) * self.current_yaw + self.alpha * self.target_yaw
-                self.current_pitch = (1 - self.alpha) * self.current_pitch + self.alpha * self.target_pitch
-
-                # 发命令
-                self.uservo.set_yaw(self.current_yaw)
-                self.uservo.set_pitch(self.current_pitch)
-                t2 = time.time()
-                waste_time = t2 - t1
-            time.sleep(self.interval - waste_time)
-
 if __name__ == "__main__":
     try:
-        uservo = UservoController(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
-        # uservo.get_pitch()
-        # uservo.get_yaw()
+        uservo_ser = UservoSer(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
         t1 = time.time()
-        uservo.set_yaw_pitch(45,0)
-        # uservo.set_pitch(0)
+        uservo_ser.send_packet(5.1,2,1)
         t2 = time.time()
         print(1/(t2-t1))
-        # uservo.set_pitch(0)
-        # uservo.set_yaw(0)
+
         car = RobotController(port=CAR_PORT, password=PASSWORD, baudrate=CAR_BAUDRATE, debug=DEBUG)
-        car.forward(1.5)
+        # car.beep_on()
+        # time.sleep(1)
+        car.beep_off()
         
-        time.sleep(1.5)
-        car.stop()
-        car.turn_right(0.3,1.5)
-        time.sleep(1)
-        car.stop()
+        # # time.sleep(1)
+        # # # car.stop()
         # # # speed = random.uniform(-1, 1)
         # # # single_time = random.uniform(0.5, 2)
         # # speed = 0.5
         # # car.motion(90,speed)
         # # time.sleep(0.2)
-        # # car.stop()
-        # # car.__del__()
-        detected = False
-        while True:
-            if not detected:
-                uservo.cruise()
-            else:
-                uservo.set_yaw(0)    
+        car.stop()
+        # # car.__del__()  
     except KeyboardInterrupt:
         logger.info("退出中...")
     finally:
