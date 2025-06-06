@@ -14,7 +14,7 @@ import pycuda.driver as cuda
 import tensorrt as trt
 import queue
 from multiprocessing import  Process, Array, Event,Lock
-from camera.camera_init import *
+from camera.camera_process import *
 from multiprocessing import Process, Event, Array
 import ctypes
 import cv2
@@ -425,23 +425,7 @@ def infer_once(yolo_model, output_array, output_lock, input_shape, resized_shape
     print(f"Use time: {use_time:.2f} s")
     return pred
 
-def visualize(input_array, input_lock, results, input_shape):
-    # 取原始图像
-    input_np = np.frombuffer(input_array, dtype=np.uint8).reshape(input_shape)
-    with input_lock:
-        frame = input_np.copy()  # 拷贝一份，避免修改共享内存数据
 
-    for pred in results:
-        x1, y1, x2, y2 = map(int, pred.boxes)
-        conf = pred.conf
-        # 画矩形框
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        # 写置信度文本
-        cv2.putText(frame, f"{conf:.2f}", (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-    cv2.imshow("Detection", frame)
-    cv2.waitKey(1)
 
 
 
@@ -458,7 +442,8 @@ if __name__ == "__main__":
     model = YoLov5TRT(NET_PATH)
     # 启动摄像头采集进程
     cam.start(input_array, output_array, input_lock, output_lock)
-
+    record_thread = threading.Thread(target=record,args=(input_array,input_lock,input_shape),daemon=True)
+    record_thread.start()
     try:
         while True:
             t1 = time.time()
