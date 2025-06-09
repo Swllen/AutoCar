@@ -1,7 +1,7 @@
 from control.Control import *
 from tracking.new_track import *
 from inference.infer import *
-
+from camera.camera_process import *
 
 class main_process:
     def __init__(self,car:RobotController=None,uservo:UservoSer=None,track:track_process=None):
@@ -21,21 +21,22 @@ class main_process:
         # motion_thread.start()
         # self.car.back_and_forth(5, 1.0)
         logger.info("Car is moving forward.")
-        t1 = time.time()
-        while t2-t1 < 60:
-            self.car.motion(-0.25, 1)
-            # logger.info(f"Moving forward at {speed_mps} m/s")
-            time.sleep(1)
-            self.car.stop()
-            time.sleep(1)
-            # logger.info("Stopped")
-            # time.sleep(0.5)
-            self.car.motion(3.14, 0.7)
-            # logger.info(f"Moving backward at {speed_mps} m/s")
-            time.sleep(1)
-            self.car.stop()
-            time.sleep(1)
-            t2 = time.time()
+        # t1 = time.time()
+        # while t < 60:
+        #     self.car.motion(-0.25, 1)
+        #     # logger.info(f"Moving forward at {speed_mps} m/s")
+        #     time.sleep(1)
+        #     self.car.stop()
+        #     time.sleep(1)
+        #     # logger.info("Stopped")
+        #     # time.sleep(0.5)
+        #     self.car.motion(3.14, 0.7)
+        #     # logger.info(f"Moving backward at {speed_mps} m/s")
+        #     time.sleep(1)
+        #     self.car.stop()
+        #     time.sleep(1)
+        #     t2 = time.time()
+        #     t = t2 - t1
 
 if __name__ == "__main__":
 
@@ -54,8 +55,8 @@ if __name__ == "__main__":
     try:
         cam = CameraProcess(input_size=(640, 480), resize_size=(320, 320))
         cam.start(input_array, output_array, input_lock, output_lock)
-        record_thread = threading.Thread(target=record,args=(input_array,input_lock,input_shape),daemon=True)
-        record_thread.start()
+        record = record_thread(input_array,input_lock,input_shape)
+        record.start()
         
         uservo = UservoSer(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
         car = RobotController(port=CAR_PORT, password=PASSWORD, baudrate=CAR_BAUDRATE, debug=DEBUG)
@@ -70,16 +71,18 @@ if __name__ == "__main__":
                             resized_shape=resized_shape)
         main = main_process(car=car,uservo=uservo,track=track)
         move_thread = threading.Thread(target=main.move_car)
-
+        
+        
         print("Press 's' to start")
         user_input = input().strip().lower()
         if user_input == 's':
             move_thread.start()
             main.track.track()
             
+            
     except KeyboardInterrupt:
         print("Interrupted, stopping...")
-    finally:
+        record.stop()
         if cam is not None:
             cam.stop()
             # if main.track.servo_thread is not None:
