@@ -442,8 +442,8 @@ if __name__ == "__main__":
     model = YoLov5TRT(NET_PATH)
     # 启动摄像头采集进程
     cam.start(input_array, output_array, input_lock, output_lock)
-    record_thread = threading.Thread(target=record,args=(input_array,input_lock,input_shape),daemon=True)
-    record_thread.start()
+    record = record_thread(input_array,input_lock,input_shape)
+    record.start()
     try:
         while True:
             t1 = time.time()
@@ -453,4 +453,5 @@ if __name__ == "__main__":
             fps = 1/(t2-t1)
             print(f"fps:{fps},used time: {(t2-t1)*1000} ms")
     except KeyboardInterrupt:
+        record.stop()
         cam.stop()
