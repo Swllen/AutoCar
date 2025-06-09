@@ -230,8 +230,8 @@ if __name__ == "__main__" and True:
 
     cam = CameraProcess(input_size=(640, 480), resize_size=(320, 320))
     cam.start(input_array, output_array, input_lock, output_lock)
-    record_thread = threading.Thread(target=record,args=(input_array,input_lock,input_shape),daemon=True)
-    record_thread.start()
+    record = record_thread(input_array,input_lock,input_shape)
+    record.start()
     try:
         uservo = UservoSer(port=USERVO_PORT, password=PASSWORD, baudrate=USERVO_BAUDRATE, debug=DEBUG)
 
