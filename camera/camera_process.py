@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 import time
 import pytz
+import threading
 
 def camera_init():
         # 启动摄像头读取主循环
@@ -22,41 +23,51 @@ def camera_init():
     else:
         logger.info("Camera initialized successfully.")
     return cap
+class record_thread(threading.Thread):
+    def __init__(self,input_array,input_lock,input_shape = (480, 640, 3)):
+        super().__init__()
+        self.stop_event = threading.Event()
+        self.input_array = input_array
+        self.input_lock = input_lock
+        self.input_shape = input_shape
 
-def record(input_array,input_lock,input_shape = (480, 640, 3)):
-    frame_np = np.frombuffer(input_array,dtype=np.uint8).reshape(input_shape)
+    def run(self):
+        frame_np = np.frombuffer(self.input_array,dtype=np.uint8).reshape(self.input_shape)
     # with input_lock:
     #     frame = frame_np.copy()
-    save_dir = 'images/camera_record/'
-    os.makedirs(save_dir, exist_ok=True)
-    timestamp = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
-    filename = os.path.join(save_dir, f"{timestamp}.avi")
-    
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.7
-    color = (0, 255, 255)
-    thickness = 2
-    position = (10, 30)
+        save_dir = 'images/camera_record/'
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+        filename = os.path.join(save_dir, f"{timestamp}.avi")
+        
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        color = (0, 255, 255)
+        thickness = 2
+        position = (10, 30)
 
-    h, w = input_shape[:2]
-    fps = 60
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    writer = cv2.VideoWriter(filename, fourcc, fps, (w, h))
+        h, w = self.input_shape[:2]
+        fps = 60
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        writer = cv2.VideoWriter(filename, fourcc, fps, (w, h))
 
-    print("Recording started:", filename)
+        logger.info(f"Recording started:{filename}")
 
-    while True:
-        with input_lock:
-            frame = frame_np.copy()
-             # 获取北京时间字符串
-         # 获取北京时间字符串
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        while True:
+            with self.input_lock:
+                frame = frame_np.copy()
+                # 获取北京时间字符串
+            # 获取北京时间字符串
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # 写时间戳文字到图像上
-        cv2.putText(frame, timestamp, position, font, font_scale, color, thickness, cv2.LINE_AA)
+            # 写时间戳文字到图像上
+            cv2.putText(frame, timestamp, position, font, font_scale, color, thickness, cv2.LINE_AA)
 
-        writer.write(frame)
-        time.sleep(1.0 / fps)
+            writer.write(frame)
+            time.sleep(1.0 / fps)
+    def stop(self):
+        self.stop_event.set()
+        logger.info("record_thread is exited")
 
 
 
